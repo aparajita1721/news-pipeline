@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pipeline Metrics — news-pipeline</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: #f5f4f0; color: #1a1a1a; margin: 0; padding: 2rem 1rem; }
+  .container { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 500; margin: 0 0 4px; }
+  .subtitle { font-size: 13px; color: #888; margin: 0 0 2rem; }
+  .controls { display: flex; align-items: center; gap: 12px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .controls label { font-size: 13px; color: #666; }
+  select { font-size: 13px; padding: 6px 10px; border: 0.5px solid #ccc; border-radius: 6px; background: #fff; color: #1a1a1a; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 2rem; }
+  .stat { background: #fff; border: 0.5px solid #e0ddd6; border-radius: 12px; padding: 1.1rem 1.25rem; }
+  .stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #888; margin: 0 0 6px; }
+  .stat .value { font-size: 26px; font-weight: 500; margin: 0 0 2px; }
+  .stat .sub { font-size: 12px; color: #888; margin: 0; }
+  .stat.success .value { color: #1D9E75; }
+  .stat.failure .value { color: #D85A30; }
+  .stat.warning .value { color: #BA7517; }
+  .section-title { font-size: 12px; font-weight: 500; color: #888; text-transform: uppercase; letter-spacing: .06em; margin: 0 0 10px; }
+  .chart-card { background: #fff; border: 0.5px solid #e0ddd6; border-radius: 12px; padding: 1.25rem; margin-bottom: 12px; }
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; }
+  .bar-label { width: 110px; color: #555; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { flex: 1; background: #f0ede8; border-radius: 4px; height: 8px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; }
+  .bar-val { width: 36px; text-align: right; color: #888; flex-shrink: 0; }
+  .run-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .run-table th { text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; color: #888; border-bottom: 0.5px solid #e0ddd6; }
+  .run-table td { padding: 10px; border-bottom: 0.5px solid #f0ede8; color: #333; }
+  .run-table tr:last-child td { border-bottom: none; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px; }
+  .badge-success { background: #E1F5EE; color: #0F6E56; }
+  .badge-failure { background: #FAECE7; color: #993C1D; }
+  .badge-cancelled { background: #F1EFE8; color: #5F5E5A; }
+  .badge-running { background: #E6F1FB; color: #185FA5; }
+  .rate-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin: 8px 0 4px; }
+  .rate-label-row { display: flex; gap: 16px; font-size: 11px; color: #888; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+  .loading { text-align: center; padding: 3rem; color: #888; font-size: 14px; }
+  .error-msg { background: #FAECE7; border: 0.5px solid #F0997B; border-radius: 8px; padding: 1rem; font-size: 13px; color: #993C1D; margin-bottom: 1rem; }
+  .repo-input { font-size: 13px; padding: 6px 10px; border: 0.5px solid #ccc; border-radius: 6px; width: 220px; }
+  button { font-size: 13px; padding: 6px 14px; border: 0.5px solid #ccc; border-radius: 6px; background: #fff; cursor: pointer; color: #1a1a1a; }
+  button:hover { background: #f0ede8; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Pipeline metrics</h1>
+  <p class="subtitle">GitHub Actions CI/CD analytics — live from the GitHub API</p>
+  <div class="controls">
+    <label>Repository:</label>
+    <input class="repo-input" id="repo-input" placeholder="owner/repo-name">
+    <select id="period-select">
+      <option value="7">Last 7 days</option>
+      <option value="30" selected>Last 30 days</option>
+      <option value="90">Last 90 days</option>
+    </select>
+    <button onclick="loadMetrics()">Load metrics</button>
+  </div>
+  <div id="error-box" class="error-msg" style="display:none"></div>
+  <div id="loading" class="loading">Enter your repository above and click Load metrics</div>
+  <div id="dashboard" style="display:none">
+    <div class="stat-grid">
+      <div class="stat"><p class="label">Total pipeline runs</p><p class="value" id="total-runs">—</p><p class="sub" id="period-label">in selected period</p></div>
+      <div class="stat success"><p class="label">Success rate</p><p class="value" id="success-rate">—</p><p class="sub" id="success-count"></p></div>
+      <div class="stat failure"><p class="label">Failure rate</p><p class="value" id="failure-rate">—</p><p class="sub" id="failure-count"></p></div>
+      <div class="stat warning"><p class="label">Median duration</p><p class="value" id="median-duration">—</p><p class="sub">per run</p></div>
+    </div>
+    <div class="chart-card">
+      <p class="section-title">Run outcome breakdown</p>
+      <div class="rate-bar" id="rate-bar"></div>
+      <div class="rate-label-row" id="rate-labels"></div>
+    </div>
+    <div class="chart-card">
+      <p class="section-title">Median duration by workflow</p>
+      <div id="duration-chart"></div>
+    </div>
+    <div class="chart-card">
+      <p class="section-title">Recent runs</p>
+      <table class="run-table">
+        <thead><tr><th>Workflow</th><th>Status</th><th>Duration</th><th>Branch</th><th>Ran</th></tr></thead>
+        <tbody id="runs-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+function fmtDur(s) {
+  if (!s || s <= 0) return '—';
+  if (s < 60) return Math.round(s) + 's';
+  return Math.round(s/60) + 'm ' + Math.round(s%60) + 's';
+}
+function fmtAgo(d) {
+  const s = (Date.now() - new Date(d))/1000;
+  if (s < 3600) return Math.round(s/60) + 'm ago';
+  if (s < 86400) return Math.round(s/3600) + 'h ago';
+  return Math.round(s/86400) + 'd ago';
+}
+function median(arr) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a,b)=>a-b);
+  const m = Math.floor(s.length/2);
+  return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
+}
+async function loadMetrics() {
+  const repo = document.getElementById('repo-input').value.trim();
+  const days = parseInt(document.getElementById('period-select').value);
+  if (!repo || !repo.includes('/')) { showError('Enter repository as: owner/repo-name'); return; }
+  document.getElementById('loading').textContent = 'Loading from GitHub API...';
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('error-box').style.display = 'none';
+  const since = new Date(Date.now() - days*86400000).toISOString();
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/actions/runs?per_page=100`, {headers:{Accept:'application/vnd.github+json'}});
+    if (res.status===404){showError('Repository not found — make sure it is public.');return;}
+    if (res.status===403){showError('GitHub API rate limit hit. Wait a minute and retry.');return;}
+    if (!res.ok){showError('GitHub API error: '+res.status);return;}
+    const data = await res.json();
+    const runs = (data.workflow_runs||[]).filter(r=>new Date(r.created_at)>=new Date(since));
+    render(runs, days);
+  } catch(e) { showError('Network error — check your internet connection.'); }
+}
+function render(runs, days) {
+  const total = runs.length;
+  const success = runs.filter(r=>r.conclusion==='success').length;
+  const failure = runs.filter(r=>r.conclusion==='failure').length;
+  const other = total - success - failure;
+  const durs = runs.filter(r=>r.conclusion).map(r=>(new Date(r.updated_at)-new Date(r.created_at))/1000).filter(d=>d>0);
+  const med = median(durs);
+  const sp = total ? Math.round(success/total*100) : 0;
+  const fp = total ? Math.round(failure/total*100) : 0;
+  const op = total ? Math.round(other/total*100) : 0;
+  document.getElementById('total-runs').textContent = total;
+  document.getElementById('period-label').textContent = 'in last '+days+' days';
+  document.getElementById('success-rate').textContent = sp+'%';
+  document.getElementById('success-count').textContent = success+' runs succeeded';
+  document.getElementById('failure-rate').textContent = fp+'%';
+  document.getElementById('failure-count').textContent = failure+' runs failed';
+  document.getElementById('median-duration').textContent = fmtDur(med);
+  document.getElementById('rate-bar').innerHTML =
+    `<div style="width:${sp}%;background:#1D9E75"></div><div style="width:${fp}%;background:#D85A30"></div><div style="width:${op}%;background:#888780"></div>`;
+  document.getElementById('rate-labels').innerHTML =
+    `<span><span class="dot" style="background:#1D9E75"></span>Success ${sp}%</span>
+     <span><span class="dot" style="background:#D85A30"></span>Failure ${fp}%</span>
+     <span><span class="dot" style="background:#888780"></span>Other ${op}%</span>`;
+  const byWf = {};
+  runs.forEach(r=>{
+    if(!r.name) return;
+    const d=(new Date(r.updated_at)-new Date(r.created_at))/1000;
+    if(!byWf[r.name]) byWf[r.name]=[];
+    if(d>0) byWf[r.name].push(d);
+  });
+  const maxD = Math.max(...Object.values(byWf).map(d=>median(d)),1);
+  document.getElementById('duration-chart').innerHTML = Object.entries(byWf).map(([name,durs])=>{
+    const m=median(durs); const pct=Math.round(m/maxD*100);
+    return `<div class="bar-row"><div class="bar-label" title="${name}">${name}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:#378ADD"></div></div><div class="bar-val">${fmtDur(m)}</div></div>`;
+  }).join('')||'<p style="color:#888;font-size:13px;margin:0">No data yet</p>';
+  document.getElementById('runs-body').innerHTML = runs.slice(0,15).map(r=>{
+    const d=fmtDur((new Date(r.updated_at)-new Date(r.created_at))/1000);
+    const bc=r.conclusion==='success'?'badge-success':r.conclusion==='failure'?'badge-failure':r.status==='in_progress'?'badge-running':'badge-cancelled';
+    return `<tr><td>${r.name||'—'}</td><td><span class="badge ${bc}">${r.conclusion||r.status||'—'}</span></td><td>${d}</td><td>${r.head_branch||'—'}</td><td>${fmtAgo(r.created_at)}</td></tr>`;
+  }).join('')||'<tr><td colspan="5" style="color:#888;text-align:center;padding:1rem">No runs in this period</td></tr>';
+  document.getElementById('loading').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+}
+function showError(msg){document.getElementById('error-box').textContent=msg;document.getElementById('error-box').style.display='block';document.getElementById('loading').style.display='none';}
+const p=new URLSearchParams(location.search);
+if(p.get('repo')){document.getElementById('repo-input').value=p.get('repo');loadMetrics();}
+</script>
+</body>
+</html>
