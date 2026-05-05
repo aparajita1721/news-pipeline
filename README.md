@@ -105,7 +105,7 @@ cd news-pipeline
 ### 2. Set up your environment
 
 ```bash
-cp .env.example .env
+copy .env.example .env
 # Open .env and paste your NewsAPI key
 ```
 
@@ -124,7 +124,8 @@ This starts:
 
 Visit [http://localhost:8080](http://localhost:8080)
 
-Login: `admin` / `admin`
+Login with the credentials you set up during airflow-init.
+Default for local dev: see your docker-compose.yml
 
 You'll see the `news_pipeline` DAG. Click it, then hit the **play button** to trigger a manual run.
 
@@ -136,7 +137,7 @@ After the pipeline completes, open `reports/YYYY-MM-DD.html` in your browser.
 
 ## Data Model
 
-### Three-layer architecture (industry standard)
+### Three-layer architecture 
 
 ```
 raw         → exactly as received from NewsAPI (preserved for debugging)
