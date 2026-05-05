@@ -7,6 +7,7 @@ Why HTML?
 
 This report is generated DAILY by Airflow and saved to reports/YYYY-MM-DD.html
 """
+
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,29 +46,39 @@ def generate_report(engine, output_dir: Path = REPORTS_DIR) -> Path:
     output_path = output_dir / f"{today}.html"
 
     with Session(engine) as session:
-        rows = session.execute(text("""
+        rows = session.execute(
+            text("""
             SELECT category, article_count, avg_sentiment,
                    positive_count, negative_count, neutral_count, top_source, run_date
             FROM mart.daily_summary
             WHERE run_date >= NOW() - INTERVAL '25 hours'
             ORDER BY article_count DESC
-        """)).fetchall()
+        """)
+        ).fetchall()
 
-        total_articles = session.execute(text("""
+        total_articles = session.execute(
+            text("""
             SELECT COUNT(*) FROM staging.articles
             WHERE ingested_at >= NOW() - INTERVAL '25 hours'
-        """)).scalar()
+        """)
+        ).scalar()
 
-        top_sources = session.execute(text("""
+        top_sources = session.execute(
+            text("""
             SELECT source_name, COUNT(*) as cnt
             FROM staging.articles
             WHERE ingested_at >= NOW() - INTERVAL '25 hours'
             GROUP BY source_name ORDER BY cnt DESC LIMIT 5
-        """)).fetchall()
+        """)
+        ).fetchall()
 
     category_cards = ""
     for row in rows:
-        sentiment_color = "#1D9E75" if row.avg_sentiment > 0.05 else ("#D85A30" if row.avg_sentiment < -0.05 else "#888780")
+        sentiment_color = (
+            "#1D9E75"
+            if row.avg_sentiment > 0.05
+            else ("#D85A30" if row.avg_sentiment < -0.05 else "#888780")
+        )
         category_cards += f"""
         <div style="background:#fff;border:0.5px solid #e0ddd6;border-radius:12px;padding:1.25rem">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">

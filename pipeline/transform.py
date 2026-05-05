@@ -16,6 +16,7 @@ What is sentiment analysis?
   "Markets crash amid fears" → negative (-0.6)
   "Company releases quarterly report" → neutral (0.0)
 """
+
 import logging
 from datetime import datetime, timezone
 from typing import List
@@ -86,24 +87,28 @@ def transform(raw_articles: List[RawArticle]) -> List[CleanArticle]:
 
     for art in deduped:
         try:
-            description = clean_text(art.description, fallback="No description available")
+            description = clean_text(
+                art.description, fallback="No description available"
+            )
             author = clean_text(art.author, fallback="Unknown author")
             full_text = f"{art.title}. {description}"
             word_count = len(full_text.split())
             sentiment_score, sentiment_label = score_sentiment(full_text)
 
-            cleaned.append(CleanArticle(
-                source_name=art.source_name,
-                author=author,
-                title=art.title,
-                description=description,
-                url=art.url,
-                published_at=parse_date(art.published_at),
-                category=art.category,
-                word_count=word_count,
-                sentiment_score=sentiment_score,
-                sentiment_label=sentiment_label,
-            ))
+            cleaned.append(
+                CleanArticle(
+                    source_name=art.source_name,
+                    author=author,
+                    title=art.title,
+                    description=description,
+                    url=art.url,
+                    published_at=parse_date(art.published_at),
+                    category=art.category,
+                    word_count=word_count,
+                    sentiment_score=sentiment_score,
+                    sentiment_label=sentiment_label,
+                )
+            )
         except Exception as e:
             logger.warning(f"Failed to transform article '{art.title[:40]}': {e}")
 

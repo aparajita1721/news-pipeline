@@ -8,6 +8,7 @@ You send a request ("give me top tech news"), it goes to the kitchen
 NewsAPI free tier: 100 requests/day, headlines only.
 Sign up for a free key at https://newsapi.org
 """
+
 import os
 import logging
 import requests
@@ -21,7 +22,9 @@ CATEGORIES = ["technology", "business", "science", "health"]
 DEFAULT_PAGE_SIZE = 20
 
 
-def fetch_articles(category: str, api_key: str, page_size: int = DEFAULT_PAGE_SIZE) -> List[RawArticle]:
+def fetch_articles(
+    category: str, api_key: str, page_size: int = DEFAULT_PAGE_SIZE
+) -> List[RawArticle]:
     """
     Fetch top headlines for one category.
     Returns a list of RawArticle objects — not yet cleaned.
@@ -45,15 +48,17 @@ def fetch_articles(category: str, api_key: str, page_size: int = DEFAULT_PAGE_SI
     raw = []
     for art in articles:
         try:
-            raw.append(RawArticle(
-                source_name=art.get("source", {}).get("name", "Unknown"),
-                author=art.get("author"),
-                title=art.get("title", ""),
-                description=art.get("description"),
-                url=art.get("url", ""),
-                published_at=art.get("publishedAt", ""),
-                category=category,
-            ))
+            raw.append(
+                RawArticle(
+                    source_name=art.get("source", {}).get("name", "Unknown"),
+                    author=art.get("author"),
+                    title=art.get("title", ""),
+                    description=art.get("description"),
+                    url=art.get("url", ""),
+                    published_at=art.get("publishedAt", ""),
+                    category=category,
+                )
+            )
         except Exception as e:
             # Skip bad articles — don't crash the whole pipeline
             logger.warning(f"Skipping article due to validation error: {e}")
@@ -79,5 +84,7 @@ def extract_all(api_key: str | None = None) -> List[RawArticle]:
             logger.error(f"Failed to fetch '{category}': {e}")
             # Continue with other categories rather than failing entirely
 
-    logger.info(f"Extracted {len(all_articles)} articles total across {len(CATEGORIES)} categories")
+    logger.info(
+        f"Extracted {len(all_articles)} articles total across {len(CATEGORIES)} categories"
+    )
     return all_articles

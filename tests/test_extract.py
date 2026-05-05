@@ -9,6 +9,7 @@ What is mocking?
   that returns data you control. The code under test never knows
   it's talking to a fake — it behaves exactly as if it got a real response.
 """
+
 import pytest
 from unittest.mock import patch, MagicMock
 from pipeline.extract import fetch_articles, extract_all
@@ -35,7 +36,7 @@ FAKE_API_RESPONSE = {
             "url": "https://wired.com/new-lang",
             "publishedAt": "2024-06-15T08:30:00Z",
         },
-    ]
+    ],
 }
 
 
@@ -63,7 +64,7 @@ def test_fetch_articles_skips_empty_titles(mock_get):
             {
                 "source": {"name": "Bad Source"},
                 "author": None,
-                "title": "",           # empty title — should be skipped
+                "title": "",  # empty title — should be skipped
                 "description": None,
                 "url": "https://example.com/bad",
                 "publishedAt": "2024-06-15T08:00:00Z",
@@ -85,6 +86,7 @@ def test_extract_all_continues_on_category_failure(mock_get):
     import requests as req
 
     call_count = 0
+
     def side_effect(*args, **kwargs):
         nonlocal call_count
         call_count += 1
@@ -104,6 +106,7 @@ def test_extract_all_continues_on_category_failure(mock_get):
 def test_extract_all_raises_without_api_key():
     """Should raise ValueError if no API key is provided and env var is not set."""
     import os
+
     os.environ.pop("NEWSAPI_KEY", None)
     with pytest.raises(ValueError, match="NEWSAPI_KEY"):
         extract_all(api_key=None)
