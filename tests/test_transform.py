@@ -8,7 +8,6 @@ What is unit testing?
 
   It's like a spell-checker for your code logic.
 """
-import pytest
 from datetime import datetime, timezone
 from pipeline.transform import clean_text, parse_date, score_sentiment, deduplicate, transform
 from pipeline.models import RawArticle
