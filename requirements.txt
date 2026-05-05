@@ -1,0 +1,5 @@
+textblob
+nltk
+pytest
+pytest-cov
+ruff

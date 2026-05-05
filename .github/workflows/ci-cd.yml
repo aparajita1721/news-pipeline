@@ -1,0 +1,144 @@
+# .github/workflows/ci-cd.yml
+#
+# This file tells GitHub Actions what to do automatically
+# every time you push code or open a pull request.
+#
+# CI (Continuous Integration):  lint + test every push → catch bugs early
+# CD (Continuous Delivery):     on merge to main, validate the DAG is loadable
+
+name: CI/CD — News Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Job 1: Lint ────────────────────────────────────────────────────────────
+  lint:
+    name: Lint & format check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff==0.4.9
+
+      - name: Run ruff linter
+        # ruff checks for common mistakes, unused imports, bad style
+        run: ruff check pipeline/ dags/ tests/
+
+      - name: Run ruff formatter check
+        run: ruff format --check pipeline/ dags/ tests/
+
+  # ── Job 2: Test ────────────────────────────────────────────────────────────
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    needs: lint                     # only run tests if lint passed
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install requests pandas sqlalchemy psycopg2-binary pydantic \
+                      textblob pytest pytest-cov ruff
+
+      - name: Download TextBlob data
+        run: python -c "import nltk; nltk.download('punkt'); nltk.download('averaged_perceptron_tagger')"
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ \
+            --cov=pipeline \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            -v
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  # ── Job 3: Validate DAG ────────────────────────────────────────────────────
+  validate-dag:
+    name: Validate Airflow DAG
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Airflow + dependencies
+        env:
+          AIRFLOW_VERSION: "2.9.1"
+          PYTHON_VERSION: "3.11"
+        run: |
+          pip install "apache-airflow==${AIRFLOW_VERSION}" \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
+          pip install requests pandas sqlalchemy psycopg2-binary pydantic textblob
+
+      - name: Initialise Airflow DB (SQLite for CI)
+        run: airflow db migrate
+        env:
+          AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+          AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////tmp/airflow-ci.db
+          AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+      - name: Check DAG loads without errors
+        run: |
+          export PYTHONPATH=$PWD
+          airflow dags list 2>&1 | tee dag_list.txt
+          grep -q "news_pipeline" dag_list.txt && echo "DAG loaded successfully" || (echo "DAG not found!" && exit 1)
+        env:
+          AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+          AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////tmp/airflow-ci.db
+          AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/dags
+          AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+          NEWSAPI_KEY: "ci-placeholder-key"
+          DATABASE_URL: "sqlite:////tmp/newsdb-ci.db"
+
+  # ── Job 4: Docker build check (on main only) ───────────────────────────────
+  docker-build:
+    name: Docker build check
+    runs-on: ubuntu-latest
+    needs: validate-dag
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t news-pipeline:${{ github.sha }} .
+
+      - name: Confirm image built
+        run: docker images news-pipeline
